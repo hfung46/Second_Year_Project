@@ -1,1 +1,24 @@
+#include <Servo.h>
+Servo servo_1;
+int Echo_1=;
+int Data_1=;
 
+
+void setup() {
+pinMode(Echo_1, OUTPUT);
+pinMode(Data_1, INPUT);
+servo_1.attach();
+}
+
+void loop() {
+
+}
+
+long Ping(long Echo, long Data) //ping function with particualr sonic sensor input
+{
+  digitalWrite(Echo, HIGH);
+  delayMicroseconds(10);  //The 10 microsecond pause where the pulse in "high"
+  digitalWrite(Echo, LOW);
+  Distance = pulseIn(Data, HIGH, 10000);
+  return Distance;
+}
