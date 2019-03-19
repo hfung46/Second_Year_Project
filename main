@@ -6,20 +6,23 @@
 
 MPU6050 mpu6050(Wire);
 
-int TRIGGER_LEFT = 2;
-int ECHO_LEFT = 3 ;
-int TRIGGER_RIGHT = 4;
-int ECHO_RIGHT = 5;
-int MAX_DISTANCE = 400;
+const int ci_Trigger_Left = 2;
+const int ci_Echo_Left = 3 ;
+const int ci_Trigger_Right = 4;
+const int ci_Echo_Right = 5;
+const int ci_Ultrasonics = 9;
+const int ci_Max_Distance = 400;
 
-NewPing sonar_Left(TRIGGER_LEFT, ECHO_LEFT, MAX_DISTANCE);
-NewPing sonar_Right(TRIGGER_RIGHT, ECHO_RIGHT, MAX_DISTANCE);
 
-Servo servos;
-int dist_Left, dist_Right;
-int pos;
+NewPing Sonar_Left(ci_Trigger_Left, ci_Echo_Left, ci_Max_Distance);
+NewPing Sonar_Right(ci_Trigger_Right, ci_Echo_Right, ci_Max_Distance);
 
-long delayTime;
+Servo servo_Ultrasonic;
+
+unsigned int ui_Dist_Left, ui_Dist_Right;
+unsigned int ui_Pos;
+
+unsigned long ul_Delay_Time;
 
 void setup() {
   Serial.begin(9600);
@@ -28,39 +31,24 @@ void setup() {
   mpu6050.calcGyroOffsets(true);
   mpu6050.update();
   mpu6050.zero();
-  servos.attach(9);
-  delayTime = millis();
+  servo_Ultrasonic.attach(ci_Ultrasonics);
+  ul_Delay_Time = millis();
 }
 
 void loop() {
   mpu6050.update();
   //Serial.print("\tangleZ : ");
   //Serial.println(mpu6050.getAngleZ());
-  mpu6050.getDirection();
+  //mpu6050.getDirection();
 
-  servos.write(pos);
-  if (millis() - delayTime >= 200) {
-    delayTime = millis();
-    dist_Left = sonar_Left.ping_cm();
-    dist_Right = sonar_Right.ping_cm();
-    Serial.print("1. ");
-    if (dist_Left <= 2 || dist_Left >= 400) {
-      Serial.print("Out of Range");
-    }
-    else {
-      Serial.print(dist_Left);
-    }
-    Serial.print("   2. ");
-    if (dist_Right <= 2 || dist_Right >= 400) {
-      Serial.print("Out of Range");
-    }
-    else {
-      Serial.print(dist_Right);
-    }
-    Serial.println(" cm");
-    pos += 30;
-    if (pos == 180) {
-      pos = 0;
+  servo_Ultrasonic.write(ui_Pos);
+  if (millis() - ul_Delay_Time >= 200) {
+    ul_Delay_Time = millis();
+    ui_Dist_Left = Sonar_Left.ping_cm();
+    ui_Dist_Right = Sonar_Right.ping_cm();
+    ui_Pos += 30;
+    if (ui_Pos == 180) {
+      ui_Pos = 0;
     }
   }
 }
