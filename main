@@ -1,0 +1,155 @@
+#include <NewPing.h>
+#include <Servo.h>
+
+#include "Gyro.h"
+#include <Wire.h>
+
+#define DEBUG_ANGLE
+
+MPU6050 mpu6050(Wire);
+
+const int ci_Trigger_Left = 2;
+const int ci_Echo_Left = 3 ;
+const int ci_Trigger_Right = 4;
+const int ci_Echo_Right = 5;
+const int ci_Ultrasonics = 8;
+const int ci_Max_Distance = 400;
+
+const int ci_Starting_Angle = 30;
+unsigned int ui_Left_30, ui_Left_60, ui_Left_90, ui_Left_120, ui_Left_150, ui_Left_180;
+unsigned int ui_Right_30, ui_Right_60, ui_Right_90, ui_Right_120, ui_Right_150, ui_Right_180;
+
+
+NewPing Sonar_Left(ci_Trigger_Left, ci_Echo_Left, ci_Max_Distance);
+NewPing Sonar_Right(ci_Trigger_Right, ci_Echo_Right, ci_Max_Distance);
+
+Servo servo_Ultrasonic;
+Servo servo_Right_Motor;
+Servo servo_Left_Motor;
+
+const int ci_Right_Motor = 10;
+const int ci_Left_Motor = 9;
+
+//unsigned int ui_Dist_Left, ui_Dist_Right;
+unsigned int ui_Pos;
+
+unsigned long ul_Delay_Time;
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  //mpu6050.begin();
+  //  mpu6050.calcGyroOffsets(true);
+  //  mpu6050.update();
+  //  mpu6050.zero();
+  servo_Ultrasonic.attach(ci_Ultrasonics);
+  ul_Delay_Time = millis();
+  ui_Pos = ci_Starting_Angle;
+
+  pinMode(ci_Right_Motor, OUTPUT);
+  servo_Right_Motor.attach(ci_Right_Motor);
+  pinMode(ci_Left_Motor, OUTPUT);
+  servo_Left_Motor.attach(ci_Left_Motor);
+
+}
+
+void loop() {
+  //mpu6050.update();
+  //Serial.print("\tangleZ : ");
+  //Serial.println(mpu6050.getAngleZ());
+  //mpu6050.getDirection();
+
+  servo_Left_Motor.writeMicroseconds(1900);
+  servo_Right_Motor.writeMicroseconds(1900);
+
+  //Ping();
+}
+
+void Ping() {
+  if (millis() - ul_Delay_Time >= 200) {
+    servo_Ultrasonic.write(ui_Pos);
+    ul_Delay_Time = millis();
+    delay(50);
+    switch (ui_Pos) {
+      case 30: {
+          //delay(2000);
+          ui_Left_30 = Sonar_Left.ping_cm();
+          ui_Right_30 = Sonar_Right.ping_cm();
+          break;
+        }
+      case 60: {
+          //delay(2000);
+          ui_Left_60 = Sonar_Left.ping_cm();
+          ui_Right_60 = Sonar_Right.ping_cm();
+          break;
+        }
+      case 90: {
+          //delay(2000);
+          ui_Left_90 = Sonar_Left.ping_cm();
+          ui_Right_90 = Sonar_Right.ping_cm();
+          break;
+        }
+      case 120: {
+          //delay(2000);
+          ui_Left_120 = Sonar_Left.ping_cm();
+          ui_Right_120 = Sonar_Right.ping_cm();
+          break;
+        }
+      case 150: {
+          //delay(2000);
+          ui_Left_150 = Sonar_Left.ping_cm();
+          ui_Right_150 = Sonar_Right.ping_cm();
+          break;
+        }
+      case 180: {
+          //delay(2000);
+          ui_Left_180 = Sonar_Left.ping_cm();
+          ui_Right_180 = Sonar_Right.ping_cm();
+          break;
+        }
+    }
+    ui_Pos += 30;
+
+    if (ui_Pos >= 210) {
+      ui_Pos = ci_Starting_Angle;
+
+#ifdef DEBUG_ANGLE
+      Serial.print("Angle :");
+      for (int i = ci_Starting_Angle ; i <= 180; i += 30) {
+        Serial.print(i);
+        Serial.print("  ");
+      }
+      Serial.println();
+      Serial.print("Left:  ");
+      Serial.print(ui_Left_30);
+      Serial.print("  ");
+      Serial.print(ui_Left_60);
+      Serial.print("  ");
+      Serial.print(ui_Left_90);
+      Serial.print("  ");
+      Serial.print(ui_Left_120);
+      Serial.print("  ");
+      Serial.print(ui_Left_150);
+      Serial.print("  ");
+      Serial.print(ui_Left_180);
+      Serial.println(" cm");
+
+
+      Serial.print("Right:  ");
+      Serial.print(ui_Right_30);
+      Serial.print("  ");
+      Serial.print(ui_Right_60);
+      Serial.print("  ");
+      Serial.print(ui_Right_90);
+      Serial.print("  ");
+      Serial.print(ui_Right_120);
+      Serial.print("  ");
+      Serial.print(ui_Right_150);
+      Serial.print("  ");
+      Serial.print(ui_Right_180);
+      Serial.println(" cm");
+#endif DEBUG_ANGLE
+
+    }
+  }
+}
