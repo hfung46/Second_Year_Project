@@ -1,0 +1,522 @@
+#include <NewPing.h>
+#include <Servo.h>
+#include "Gyro.h"
+#include <Wire.h>
+
+//#define DEBUG_ANGLE
+//#define DEBUG_AVOIDANCE
+//#define DEBUG_POSITION
+
+MPU6050 mpu6050(Wire);
+
+const int ci_Trigger_Left = 2;                                                                             //Ultrasonic Constants
+const int ci_Echo_Left = 3 ;
+const int ci_Trigger_Right = 4;
+const int ci_Echo_Right = 5;
+const int ci_Ultrasonics = 8;
+const int ci_Max_Distance = 400;
+const int ci_Starting_Angle = 65;
+const int ci_Ping_Interval = 275;
+const int ci_Angle_Incre = 45;
+
+NewPing Sonar_Left(ci_Trigger_Left, ci_Echo_Left, ci_Max_Distance);
+NewPing Sonar_Right(ci_Trigger_Right, ci_Echo_Right, ci_Max_Distance);
+Servo servo_Ultrasonic;
+
+unsigned int ui_Pos;                                                                                       //angle of servo motors
+
+unsigned int ui_Left_1, ui_Left_2, ui_Left_3;                                                              //Ultrasonic Readings
+unsigned int ui_Right_1, ui_Right_2, ui_Right_3;
+
+
+Servo servo_Right_Motor;                                                                                   //Motor Constants
+Servo servo_Left_Motor;
+Servo servo_Funnel_Motor;
+
+unsigned int ui_Left_Motor_Speed, ui_Right_Motor_Speed;
+const int ci_Motors_Speed = 1610;
+const int ci_Turn_Speed_Backwards = 1390;
+const int ci_Turn_Speed_Forwards = 1610;
+const int ci_Right_Motor = 6;
+const int ci_Left_Motor = 7;
+const int ci_Funnel_Motor = 9;
+
+unsigned long ul_Delay_Time;                                                                               //Time for Ping()
+
+
+unsigned long ul_Angle_Delay;
+
+volatile bool init_Straight;                                                                               //types for going straight
+volatile bool init_Straight2;
+volatile bool init_Straight3;
+volatile bool init_Straight4;
+float f_Straight_Angle;
+unsigned long ul_Straight_Delay;
+unsigned long ul_Straight_Time;
+unsigned long ul_Straight_Delay_Offset;
+int int_Porportion;
+
+bool object_Right;                                                                                         //Object Detection
+bool object_Left;
+bool object_Middle;
+bool object_Middle_2;
+bool object_Right_2;
+bool object_Left_2;
+
+bool bool_Leeway;                                                                                          //Object Avoidance
+bool object_avoidance;
+unsigned long ul_Leeway;
+unsigned int ui_Prev_Obj = 0;
+bool bool_Straight_Offset;
+
+Servo servo_Dump;                                                                                          //Dump
+
+const int led_left = 11;                                                                                   //LEDs for debugging
+const int led_middle = 12;
+const int led_right = 13;
+
+
+float f_East_West;                                                                                         //Position Tracking
+int i_Turn_Delay;
+float f_Temp_Angle;
+float f_EW_Counter;
+float f_Current_Angle;
+float f_Angle_Change;
+
+bool go_Home;
+bool bool_Facing_East;
+long l_Home_Timer;
+
+void setup() {
+  Serial.begin(9600);
+
+  servo_Ultrasonic.attach(ci_Ultrasonics);                                              //Ultrasonice setup
+  ul_Delay_Time = millis();
+  ui_Pos = ci_Starting_Angle;
+
+  pinMode(ci_Right_Motor, OUTPUT);                                                      //Motor setup
+  servo_Right_Motor.attach(ci_Right_Motor);
+  pinMode(ci_Left_Motor, OUTPUT);
+  servo_Left_Motor.attach(ci_Left_Motor);
+  pinMode(ci_Funnel_Motor, OUTPUT);
+  servo_Funnel_Motor.attach(ci_Funnel_Motor);
+
+  pinMode(10, OUTPUT);                                                                   //Dump motor setup
+  servo_Dump.attach(10);
+
+  ui_Left_Motor_Speed = ci_Motors_Speed;                                                 //Speed of Motors
+  ui_Right_Motor_Speed = ci_Motors_Speed + 20;
+
+  f_Current_Angle = mpu6050.getAngleZ();                                                 //Initialize Volatile Variables
+  servo_Ultrasonic.write(ci_Starting_Angle);
+  servo_Dump.write(0);
+  init_Straight = true;
+  object_Right = false;
+  object_Left = false;
+  object_Middle = false;
+  bool_Leeway = true;
+  init_Straight2 = true;
+  f_East_West = 0;
+  go_Home = false;
+  bool_Straight_Offset = false;
+
+  //  servo_Funnel_Motor.writeMicroseconds(1650);                                       //Dumps and preps robot for start
+  //  servo_Dump.write(0);
+  //  delay(1000);
+  //  servo_Dump.write(180);
+  //  delay(1000);
+  //  servo_Funnel_Motor.writeMicroseconds(1350);
+  //  delay(500);
+  //  servo_Dump.write(0);
+  //  delay(1000);
+  //servo_Funnel_Motor.writeMicroseconds(1900);
+
+  pinMode(led_left , OUTPUT);                                                           //For LED debugging
+  pinMode(led_middle , OUTPUT);
+  pinMode(led_right , OUTPUT);
+
+  Wire.begin();                                                                         //Gyroscope setup
+  mpu6050.begin();
+  mpu6050.calcGyroOffsets(true);
+  mpu6050.update();
+  mpu6050.zero();
+  l_Home_Timer = millis();
+  ul_Angle_Delay = millis();
+  ul_Straight_Delay = millis();
+
+}
+
+void loop() {
+
+  mpu6050.update();                                                                     //Update Gyro
+//#ifdef DEBUG_AVOIDANCE
+  Serial.print("     ");
+  Serial.println(mpu6050.getAngleZ());
+//#endif DEBUG_AVOIDANCE
+
+  //  Ping();                                                                               //Update Ultrasonic
+  if (millis() - l_Home_Timer >= 10000) {
+    go_Home = true;
+  }
+  //FaceEast();
+  Ping();
+
+  //  FaceEast();
+  //  if (bool_Facing_East) {
+  //    Ping();                   //if object is present turn, straight turn back
+  //  }
+}
+
+void FaceEast() {
+  int_Porportion = abs(mpu6050.getAngleZ() - 180);
+  int_Porportion = map(int_Porportion, 0, 90 , 15, 0);
+  if (185 < mpu6050.getAngleZ() && mpu6050.getAngleZ() <= 360) {                                              //turn right
+    servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Backwards - 20 + int_Porportion);
+    servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Forwards - int_Porportion);
+    bool_Facing_East = false;
+    digitalWrite(led_left, LOW);
+    digitalWrite(led_right, LOW);
+    digitalWrite(led_middle, LOW);
+  }
+  if (0 <= mpu6050.getAngleZ() && mpu6050.getAngleZ() < 175) {                                        //turn left
+
+    digitalWrite(led_left, LOW);
+    digitalWrite(led_right, LOW);
+    digitalWrite(led_middle, LOW);
+    servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Forwards + 20 - int_Porportion);
+    servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Backwards - int_Porportion);
+    bool_Facing_East = false;
+  }
+  if (175 <= mpu6050.getAngleZ() && mpu6050.getAngleZ() <= 185) {
+    Serial.println("Robot is facing east");
+    bool_Facing_East = true;
+    digitalWrite(led_left, HIGH);
+    digitalWrite(led_right, HIGH);
+    digitalWrite(led_middle, HIGH);
+    servo_Right_Motor.writeMicroseconds(ui_Left_Motor_Speed);
+    servo_Left_Motor.writeMicroseconds(ui_Right_Motor_Speed);
+  }
+}
+
+
+void GoStraight() {       //this function makes the robot go approximately straight and updates a positional variable
+
+  if (init_Straight) {                                                //Initializes go straight function, needed to start off the process
+    init_Straight = false;
+    ul_Straight_Delay = millis();
+    ul_Straight_Delay_Offset = millis();
+    init_Straight2 = true;
+    init_Straight3 = false;
+    ui_Right_Motor_Speed = ci_Motors_Speed + 17;
+    servo_Left_Motor.writeMicroseconds(ui_Left_Motor_Speed);          //if robot hits obstacles put this back where it was or increase the other delay time
+    servo_Right_Motor.writeMicroseconds(ui_Right_Motor_Speed);
+    bool_Straight_Offset = false;
+    bool_Facing_East = false;
+  }
+
+  if (millis() - ul_Straight_Delay_Offset >= 1800) {
+    bool_Straight_Offset = true;
+  }
+
+  if (go_Home && bool_Straight_Offset && !bool_Facing_East) {
+    Serial.println("Finding East");
+    FaceEast();
+
+  }
+
+  if (millis() -  ul_Straight_Delay >= 200) {
+
+    if (init_Straight3) {                                             //updates the angle on which the robot will follow after motors are set to straight
+      init_Straight3 = false;                                         //runs the second time around
+      f_Straight_Angle = mpu6050.getAngleZ();
+      if (go_Home) {
+        f_Straight_Angle = 180;
+      }
+#ifdef DEBUG_AVOIDANCE
+      Serial.print("Robot will now follow the angle that is: ");
+      Serial.println(f_Straight_Angle);
+#endif DEBUG_AVOIDANCE
+      init_Straight4 = true;
+      f_Current_Angle = mpu6050.getAngleZ();
+    }
+
+    if (init_Straight2) {
+      init_Straight4 = false;
+      if (go_Home) {
+        if (bool_Facing_East) {
+          init_Straight2 = false;
+          init_Straight3 = true;
+        }
+      }
+      else {
+        init_Straight4 = false;
+        init_Straight2 = false;
+        init_Straight3 = true;
+      }
+      f_East_West = millis();                                                 //used to record transition of position
+    }
+
+    if (init_Straight4) {                                                     //this block of code turns the angle into its acute angle then stores it in the counter
+      f_Temp_Angle = mpu6050.getAngleZ();
+      f_EW_Counter -= (((millis() - f_East_West) * cos(f_Temp_Angle * 3.141592 / 180)));
+#ifdef DEBUG_POSITION
+      Serial.println(f_EW_Counter);
+#endif DEBUG_POSITION
+      f_East_West = millis();
+    }
+
+    f_Current_Angle = mpu6050.getAngleZ();
+    f_Angle_Change = mpu6050.getAngleZ() - f_Current_Angle;                    //approximate velocity of angular motion
+
+    ul_Straight_Delay = millis();                                              //updates the clock
+
+    if (init_Straight4) {                                                      //robot starts calibrating for straightness
+
+      if (mpu6050.getAngleZ() > f_Straight_Angle + 1 && !(f_Angle_Change < 0)) {
+        ui_Right_Motor_Speed -= map((mpu6050.getAngleZ() - f_Straight_Angle), 0, 5, 0, 2);
+#ifdef DEBUG_AVOIDANCE
+        Serial.println("    Robot Straying Left");
+#endif DEBUG_AVOIDANCE
+      }
+
+      if (mpu6050.getAngleZ() < f_Straight_Angle - 1 && !(f_Angle_Change > 0)) {
+        ui_Right_Motor_Speed += map((f_Straight_Angle - mpu6050.getAngleZ()), 0, 5, 0, 2);
+#ifdef DEBUG_AVOIDANCE
+        Serial.println("    Robot Straying Right");
+#endif DEBUG_AVOIDANCE
+      }
+
+      ui_Right_Motor_Speed = constrain(ui_Right_Motor_Speed, 1617, 1637);
+      servo_Left_Motor.writeMicroseconds(ui_Left_Motor_Speed);
+      servo_Right_Motor.writeMicroseconds(ui_Right_Motor_Speed);
+    }
+
+#ifdef DEBUG_AVOIDANCE
+    Serial.print("Right motor speed: ");
+    Serial.println(ui_Right_Motor_Speed);
+#endif DEBUG_AVOIDANCE
+  }
+}
+
+void Interpret() {  //This function takes the results from ping and react appropriately, runs every cycle of ultrasonic sensors
+
+#ifdef DEBUG_ANGLE
+  if (object_Left || object_Left_2) {
+    digitalWrite(led_left, HIGH);
+  }
+  else {
+    digitalWrite(led_left, LOW);
+  }
+  if (object_Right || object_Right_2) {
+    digitalWrite(led_right, HIGH);
+  }
+  else {
+    digitalWrite(led_right, LOW);
+  }
+  if (object_Middle || object_Middle_2) {
+    digitalWrite(led_middle, HIGH);
+  }
+  else {
+    digitalWrite(led_middle, LOW);
+  }
+#endif DEBUG_ANGLE
+
+  if ((object_Right || object_Right_2) && !object_Left && !object_Left_2 && !object_avoidance) {            //object right
+#ifdef DEBUG_AVOIDANCE
+    Serial.println("Object on the Right");
+#endif DEBUG_AVOIDANCE
+    if (object_Right_2) {
+      i_Turn_Delay = 160;                                                                         //this int changes based on how close objects are to the center
+    }
+    else {
+      i_Turn_Delay = 140;
+    }
+    servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Forwards + 20);
+    servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Backwards);
+    ui_Prev_Obj = 1;
+    bool_Leeway = true;                                                 //object would be detected and robot would move accordingly but shape of the robot
+  } //meant sometimes not turning enough, and wheels would get caught, this bool is used to account for such by making robot turn more based on a tested time value
+
+  if (!object_Right && !object_Right_2 && (object_Left || object_Left_2) && !object_avoidance) {           //object left
+    if (object_Left_2) {
+      i_Turn_Delay = 160;
+    }
+    else {
+      i_Turn_Delay = 140;
+    }
+#ifdef DEBUG_AVOIDANCE
+    Serial.println("Object on the Left");
+#endif DEBUG_AVOIDANCE
+    servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Backwards - 20);
+    servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Forwards);
+    ui_Prev_Obj = 2;
+    bool_Leeway = true;
+  }
+
+  if (!object_Right && !object_Right_2 && !object_Left && !object_Left_2 && (object_Middle || object_Middle_2) && !object_avoidance) {    //object middle
+#ifdef DEBUG_AVOIDANCE
+    Serial.println("Object in middle");
+#endif DEBUG_AVOIDANCE
+    servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Backwards - 20);
+    servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Forwards);
+    ui_Prev_Obj = 2;
+    bool_Leeway = true;
+    i_Turn_Delay = 160;
+  }
+
+  if ((object_Right || object_Right_2) && (object_Left || object_Left_2)) {  //if object was on the right, robot keeps turning right
+#ifdef DEBUG_AVOIDANCE                                                       //if there is now an object on the left and right vice versa
+    Serial.println("Object on both sides");
+#endif DEBUG_AVOIDANCE
+
+    switch (ui_Prev_Obj) {
+
+      case 1: {
+          servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Forwards + 20);
+          servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Backwards);
+          object_avoidance = true;                                            //through testing, robot would occasionally cycle between turning left, then right on and on
+          break;                                                              //when encountering obstacles such as walls and corners, this bool tells robot to keep turning
+        }                                                                     //until it is oriented such that no objects are being detected
+
+      case 2: {
+          servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Backwards - 20);
+          servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Forwards);
+          object_avoidance = true;
+          break;
+        }
+
+      case 3: {   //add scenario for on off on
+          break;
+        }
+
+      default : {
+          servo_Right_Motor.writeMicroseconds(ci_Turn_Speed_Backwards - 20);
+          servo_Left_Motor.writeMicroseconds(ci_Turn_Speed_Forwards);
+          object_avoidance = true;
+          break;
+        }
+    }
+    bool_Leeway = true;
+    i_Turn_Delay = 160;
+  }
+  if (go_Home) {
+    i_Turn_Delay = 80;
+  }
+  if ((!object_Right && !object_Left && !object_Middle && !object_Middle_2 && !object_Right_2 && !object_Left_2) || (!object_Right && !object_Left && (object_Middle || object_Middle_2) && !object_Right_2 && !object_Left_2)) {         //no object sensed
+#ifdef DEBUG_AVOIDANCE
+    Serial.println("No Objects Sensed");
+#endif DEBUG_AVOIDANCE
+    if (bool_Leeway) {                                  //as explained above this bool makes robot turn more based on a tested time value
+      ul_Leeway = millis();
+      bool_Leeway = false;
+      init_Straight = true;
+    }
+    if (millis() - ul_Leeway >= i_Turn_Delay) {
+#ifdef DEBUG_AVOIDANCE
+      Serial.println("Going Straight");
+#endif DEBUG_AVOIDANCE
+      object_avoidance = false;                       //Robot will once again react to objects being detected as explained above
+      GoStraight();
+    }
+  }
+}
+
+void Ping() {     //This function Pings and updates ultrasonic readings
+
+  if (millis() - ul_Delay_Time >= ci_Ping_Interval) {                       //only pings in intervals to allow for micro servo to reach new position
+    ul_Delay_Time = millis();
+    switch (ui_Pos) {
+      case ci_Starting_Angle: {
+          ui_Left_1 = Sonar_Left.ping_cm();
+          ui_Right_1 = Sonar_Right.ping_cm();
+
+          if (ui_Right_1 <= 25 && ui_Right_1 >= 3) {
+            object_Right = true;
+          }
+          else {
+            object_Right = false;
+          }
+
+          if (ui_Left_1 <= 25 && ui_Left_1 >= 3) {
+            object_Middle = true;
+          }
+          else {
+            object_Middle = false;
+          }
+          break;
+        }
+      case (ci_Starting_Angle+ci_Angle_Incre): {
+          ui_Left_2 = Sonar_Left.ping_cm();
+          ui_Right_2 = Sonar_Right.ping_cm();
+
+          if (ui_Right_2 <= 25 && ui_Right_2 >= 3) {
+            object_Right_2 = true;
+          }
+          else {
+            object_Right_2 = false;
+          }
+
+          if (ui_Left_2 <= 25 && ui_Left_2 >= 3) {
+            object_Left = true;
+          }
+          else {
+            object_Left = false;
+          }
+
+          break;
+        }
+      case (ci_Starting_Angle+ci_Angle_Incre*2): {
+          ui_Left_3 = Sonar_Left.ping_cm();
+          ui_Right_3 = Sonar_Right.ping_cm();
+
+          if (ui_Right_3 <= 25 && ui_Right_3 >= 3) {
+            object_Middle_2 = true;
+          }
+          else {
+            object_Middle_2 = false;
+          }
+
+          if (ui_Left_3 <= 25 && ui_Left_3 >= 3) {
+            object_Left_2 = true;
+          }
+          else {
+            object_Left_2 = false;
+          }
+
+          break;
+        }
+    }
+
+    Interpret();                                                                            //Interpret Function is called
+    ui_Pos += ci_Angle_Incre;
+
+    if (ui_Pos >= ci_Starting_Angle + ci_Angle_Incre * 3) {                    //robot only interprets information every cycle
+      ui_Pos = ci_Starting_Angle;
+
+#ifdef DEBUG_ANGLE
+      Serial.print("Angle :");
+      for (int i = ci_Starting_Angle ; i < ci_Starting_Angle + ci_Angle_Incre * 3; i += ci_Angle_Incre) {
+        Serial.print(i);
+        Serial.print("  ");
+      }
+      Serial.println();
+      Serial.print("Left:  ");
+      Serial.print(ui_Left_1);
+      Serial.print("  ");
+      Serial.print(ui_Left_2);
+      Serial.print("  ");
+      Serial.print(ui_Left_3);
+      Serial.println(" cm");
+
+      Serial.print("Right:  ");
+      Serial.print(ui_Right_1);
+      Serial.print("  ");
+      Serial.print(ui_Right_2);
+      Serial.print("  ");
+      Serial.print(ui_Right_3);
+      Serial.println(" cm");
+#endif DEBUG_ANGLE
+    }
+    servo_Ultrasonic.write(ui_Pos);                                                 //micro servo written to new position after pinging to allow not before so ping isnt affected
+  }
+}
